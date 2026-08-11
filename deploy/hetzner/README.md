@@ -125,7 +125,7 @@ systemctl enable f1-jobs.service
 systemctl restart f1-jobs.service
 ```
 
-Show the admin token used by the `Úlohy` tab:
+Show the admin token used by the app's `Ulohy` tab:
 
 ```bash
 cat /etc/f1-models/job-server.env
@@ -146,6 +146,23 @@ From your local machine:
 ```powershell
 scp app/data/app-data.json root@SERVER_IP:/var/www/f1-models/repo/app/data/app-data.json
 scp app/data/model_photo_overrides.json root@SERVER_IP:/var/www/f1-models/repo/app/data/model_photo_overrides.json
+```
+
+For year-processing jobs, also upload the private working inputs that are not stored in the public GitHub repository:
+
+```powershell
+tar -czf f1-private-runtime.tgz outputs/model_catalog outputs/wiki_audit input app/data/photo_page_cache app/data/app-data.json app/data/model_photo_overrides.json
+scp f1-private-runtime.tgz root@SERVER_IP:/tmp/f1-private-runtime.tgz
+```
+
+Then on the server:
+
+```bash
+cd /var/www/f1-models/repo
+tar -xzf /tmp/f1-private-runtime.tgz
+find outputs input app/data/photo_page_cache -type d -exec chmod 755 {} +
+find outputs input app/data/photo_page_cache -type f -exec chmod 644 {} +
+chmod 644 app/data/*.json
 ```
 
 Then on the server:

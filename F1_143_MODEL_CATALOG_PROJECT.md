@@ -667,6 +667,70 @@ README.md
 
 Slozky `outputs/` a `input/` jsou lokalni/private a nemaji byt soucasti public repozitare.
 
+## Hetzner backend job MVP - 2026-08-12
+
+Pridana prvni funkcni cloudova vrstva pro spousteni rocniku primo z aplikace.
+
+Nasazeno:
+
+- staticky frontend stale bezi pres Nginx,
+- pridana zalozka `Ulohy`,
+- pridany backend `app/backend/job_server.py`,
+- backend bezi na serveru jako systemd sluzba `f1-jobs.service`,
+- Nginx proxy smeruje `/api/` na `127.0.0.1:8765`,
+- admin spousteni je chraneno tokenem z `/etc/f1-models/job-server.env`,
+- token neni v GitHubu,
+- neverejna data zustavaji mimo GitHub a nahravaji se primo na server.
+
+API:
+
+- `GET /api/health` - kontrola backendu,
+- `GET /api/jobs` - posledni ulohy,
+- `GET /api/jobs/{id}` - stav jedne ulohy,
+- `GET /api/jobs/{id}/log` - textovy log,
+- `POST /api/jobs/start` - spusteni rocniku; vyzaduje hlavicku `X-Admin-Token`.
+
+Pipeline rocnikove ulohy:
+
+1. zalozit zalohu `app-data.json` a `model_photo_overrides.json`,
+2. volitelne spustit kompletni sber zdroju `collect_model_catalog_expanded.py`,
+3. doplnit Minichamps z cache `app/scripts/import_143diecast_minichamps.py`,
+4. doplnit Spark official API pro konkretni rok,
+5. spustit `match_model_catalog.py`,
+6. spustit `app/scripts/prepare_app_data.py`,
+7. spustit `app/scripts/discover_model_photos.py --season YEAR`,
+8. znovu spustit `prepare_app_data.py`,
+9. ulozit souhrn poctu modelu, radku sbirky a fotek.
+
+Dulezita pravidla:
+
+- osobni sbirka nesmi byt zakladem katalogu,
+- osobni sbirka se pouziva az v kroku parovani,
+- katalogovy kod vyrobce ma prednost pred textovou podobnosti,
+- Spark se musi normalizovat na `S` + 4 cisla,
+- Minichamps se musi normalizovat na devitimistny kod,
+- radky bez jednoznacneho kodu zustavaji kandidati.
+
+Overeni na Hetzneru:
+
+- URL aplikace: `http://62.238.50.166/`,
+- API health vraci `200`,
+- `f1-jobs.service` bezi,
+- testovaci rychly job pro rok `1981` probehl do stavu `done`,
+- vysledek testu: `58` modelu pro rok 1981, `58` s fotkou podle aktualnich dat,
+- test bez kompletniho sberu zdroju, s `photoLimit=1`.
+
+Private data nutna pro rocnikove joby:
+
+- `input/`,
+- `outputs/model_catalog/`,
+- `outputs/wiki_audit/`,
+- `app/data/photo_page_cache/`,
+- `app/data/app-data.json`,
+- `app/data/model_photo_overrides.json`.
+
+Tyto soubory nejsou v public GitHubu a musi se na server nahravat zvlast.
+
 ## Otevrene ukoly
 
 - Sjednotit rocni import do `app/scripts/build_year.py`.
@@ -674,11 +738,11 @@ Slozky `outputs/` a `input/` jsou lokalni/private a nemaji byt soucasti public r
 - Automatizovat fallback fotek pro Spark pri 403.
 - Automatizovat overovani fotek po importu.
 - Zavest per-year audit JSON/CSV.
-- Doplnit cloudovy backend a databazovy model.
+- Rozsirit cloudovy backend o databazovy model.
 - Rozhodnout, ktere obrazky ukladat lokalne a ktere jen odkazovat.
 - Vytvorit export/import osobni sbirky oddeleny od master katalogu.
 - Zlepsit kandidaty tak, aby bylo jasne, proc vznikly.
-- Doplnit dokumentaci nasazeni na cloud.
+- Doplnit tlacitko pro publikovani pouze po kontrole vysledku.
 
 ## Pravidlo pro dalsi praci
 
