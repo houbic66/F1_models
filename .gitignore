@@ -30,9 +30,9 @@ pnpm-debug.log*
 # Local environment and OS/editor files
 .env
 .env.*
+.ssh-deploy/
 *.log
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
-

@@ -11,6 +11,7 @@ if [ ! -d "$APP_DIR/.git" ]; then
 fi
 
 cd "$APP_DIR"
+git config --global --add safe.directory "$APP_DIR"
 git pull --ff-only
 
 chown -R www-data:www-data "$APP_DIR"
@@ -19,4 +20,3 @@ nginx -t
 systemctl reload nginx
 
 echo "F1 models app deployed."
-
