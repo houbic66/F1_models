@@ -14,10 +14,8 @@ cd "$APP_DIR"
 git config --global --add safe.directory "$APP_DIR"
 git pull --ff-only
 
-if ! python3 -m venv --help >/dev/null 2>&1; then
-  apt-get update
-  DEBIAN_FRONTEND=noninteractive apt-get install -y python3-venv
-fi
+apt-get update
+DEBIAN_FRONTEND=noninteractive apt-get install -y python3-venv
 
 python3 -m venv /var/www/f1-models/venv
 /var/www/f1-models/venv/bin/python -m pip install --upgrade pip
