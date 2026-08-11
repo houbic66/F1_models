@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="540" viewBox="0 0 900 540" role="img" aria-label="F1 model placeholder">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#f7f4ee"/>
+      <stop offset="1" stop-color="#dfe8ed"/>
+    </linearGradient>
+    <linearGradient id="car" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#123047"/>
+      <stop offset="0.5" stop-color="#2c6f7d"/>
+      <stop offset="1" stop-color="#b33d2e"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="540" fill="url(#bg)"/>
+  <path d="M135 332c46-48 96-79 162-91l118-70c28-16 59-22 91-18l138 18c22 3 39 16 49 36l34 67 51 20c19 8 30 21 34 39l-39 29H140l-5-30z" fill="url(#car)"/>
+  <path d="M274 246l72-42 124 3-37 58-159-19z" fill="#eaf4f6" opacity=".82"/>
+  <path d="M463 210l136 16 37 59-172-20-1-55z" fill="#eaf4f6" opacity=".72"/>
+  <circle cx="268" cy="363" r="61" fill="#111827"/>
+  <circle cx="268" cy="363" r="28" fill="#c7d2d8"/>
+  <circle cx="646" cy="363" r="61" fill="#111827"/>
+  <circle cx="646" cy="363" r="28" fill="#c7d2d8"/>
+  <path d="M95 421h710" stroke="#8fa7b2" stroke-width="5" stroke-linecap="round"/>
+  <text x="450" y="476" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="32" fill="#243949" font-weight="700">F1 1:43</text>
+</svg>
