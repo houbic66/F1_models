@@ -556,6 +556,78 @@ tr.selected-row > td {
   background: linear-gradient(90deg, var(--teal), var(--amber));
 }
 
+.job-form {
+  display: grid;
+  grid-template-columns: minmax(90px, 120px) minmax(110px, 140px) minmax(220px, auto) minmax(220px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 16px;
+}
+
+.check-field {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 9px;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.check-field input {
+  width: 18px;
+  height: 18px;
+}
+
+.token-field {
+  min-width: 0;
+}
+
+.job-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  padding: 16px;
+}
+
+.job-card {
+  display: grid;
+  gap: 7px;
+  min-height: 112px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+}
+
+.job-card.active {
+  border-color: var(--teal);
+  box-shadow: inset 4px 0 0 var(--teal);
+}
+
+.job-card small {
+  color: var(--muted);
+}
+
+.job-log {
+  max-height: 360px;
+  margin: 0;
+  overflow: auto;
+  padding: 16px;
+  background: #111820;
+  color: #eaf0f5;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.notice.error {
+  color: var(--red);
+  font-weight: 700;
+}
+
 .detail {
   position: sticky;
   top: calc(var(--topbar-height) + var(--filterbar-height) + 18px);
@@ -790,6 +862,10 @@ tr.selected-row > td {
     grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(150px, 0.7fr));
   }
 
+  .job-form {
+    grid-template-columns: repeat(2, minmax(140px, 1fr));
+  }
+
   .status-metrics {
     grid-template-columns: repeat(4, auto);
   }
@@ -812,6 +888,10 @@ tr.selected-row > td {
   }
 
   .filter-stack {
+    grid-template-columns: 1fr;
+  }
+
+  .job-form {
     grid-template-columns: 1fr;
   }
 

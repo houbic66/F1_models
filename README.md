@@ -60,6 +60,8 @@ Deployment notes for a clean Hetzner VPS are in:
 deploy/hetzner/README.md
 ```
 
+The cloud deployment can also run protected year-processing jobs from the app. Open the `Úlohy` tab, enter the server admin token, choose a season, and start the background job.
+
 ## Data Policy
 
 The following are intentionally not committed to the public repository:

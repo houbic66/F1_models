@@ -1,0 +1,15 @@
+[Unit]
+Description=F1 Models background job API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/f1-models/repo
+EnvironmentFile=/etc/f1-models/job-server.env
+ExecStart=/var/www/f1-models/venv/bin/python /var/www/f1-models/repo/app/backend/job_server.py
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target

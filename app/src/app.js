@@ -1,4 +1,5 @@
-const DATA_URL = "./data/app-data.json?v=20260809-1979-spark-photos-v3";
+const DATA_URL = "./data/app-data.json?v=20260812-year-jobs-v1";
+const API_BASE = "/api";
 const PLACEHOLDER = "./assets/model-placeholder.svg";
 
 const state = {
@@ -12,6 +13,15 @@ const state = {
   selectedModelId: "",
   selectedCollectionRow: "",
   collectionSort: null,
+  jobs: [],
+  jobsLoaded: false,
+  jobsError: "",
+  selectedJobId: "",
+  selectedJobLog: "",
+  jobSeason: "1981",
+  jobPhotoLimit: "250",
+  jobFullCatalog: true,
+  adminToken: localStorage.getItem("f1-admin-token") || "",
 };
 
 const statusLabels = {
@@ -30,6 +40,7 @@ const views = [
   ["season", "Roky"],
   ["catalog", "Katalog"],
   ["candidates", "Kandidáti"],
+  ["jobs", "Úlohy"],
 ];
 
 const collectionSortableColumns = [
@@ -859,11 +870,175 @@ function meta(label, value) {
   `;
 }
 
+function jobStatusLabel(status) {
+  return {
+    queued: "Čeká",
+    running: "Běží",
+    done: "Hotovo",
+    failed: "Chyba",
+  }[status] || status || "Neznámé";
+}
+
+function jobStatusColor(status) {
+  if (status === "done") return "green";
+  if (status === "failed") return "red";
+  if (status === "running") return "blue";
+  return "yellow";
+}
+
+function renderJobs() {
+  const selected = state.jobs.find((job) => job.id === state.selectedJobId) || state.jobs[0] || null;
+  const defaultSeason = state.jobSeason || (state.season !== "all" ? state.season : "1981");
+  return `
+    <div class="main-stack">
+      <section class="panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <strong>Doplnit ročník</strong>
+            <span>Nejprve nezávislý katalog, fotky a zdroje; sbírka se porovnává až nakonec.</span>
+          </div>
+          <div class="panel-tools">
+            <button class="ghost-button" data-action="refreshJobs">Obnovit úlohy</button>
+          </div>
+        </div>
+        <div class="job-form">
+          <div class="field">
+            <label for="jobSeason">Rok</label>
+            <input id="jobSeason" data-job-field="jobSeason" value="${escapeHtml(defaultSeason)}" inputmode="numeric" />
+          </div>
+          <div class="field">
+            <label for="jobPhotoLimit">Limit fotek</label>
+            <input id="jobPhotoLimit" data-job-field="jobPhotoLimit" value="${escapeHtml(state.jobPhotoLimit)}" inputmode="numeric" />
+          </div>
+          <label class="check-field">
+            <input type="checkbox" data-job-field="jobFullCatalog" ${state.jobFullCatalog ? "checked" : ""} />
+            <span>Kompletní sběr katalogu ze zdrojů</span>
+          </label>
+          <div class="field token-field">
+            <label for="adminToken">Admin token</label>
+            <input id="adminToken" data-job-field="adminToken" value="${escapeHtml(state.adminToken)}" type="password" autocomplete="off" />
+          </div>
+          <button class="primary-button" data-action="startYearJob">Spustit ročník</button>
+        </div>
+        ${state.jobsError ? `<p class="notice error">${escapeHtml(state.jobsError)}</p>` : ""}
+      </section>
+      <section class="panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <strong>Poslední úlohy</strong>
+            <span>${state.jobsLoaded ? `${formatNumber(state.jobs.length)} běhů` : "Načítám..."}</span>
+          </div>
+        </div>
+        <div class="job-list">
+          ${
+            state.jobs.length
+              ? state.jobs
+                  .map(
+                    (job) => `
+                      <button class="job-card ${selected?.id === job.id ? "active" : ""}" data-job-id="${escapeHtml(job.id)}">
+                        <span class="pill ${jobStatusColor(job.status)}">${escapeHtml(jobStatusLabel(job.status))}</span>
+                        <strong>${escapeHtml(job.season)} · ${escapeHtml(job.step || "")}</strong>
+                        <small>${escapeHtml(job.createdAt || "")}</small>
+                        ${
+                          job.summary && Object.keys(job.summary).length
+                            ? `<small>${formatNumber(job.summary.models || 0)} modelů · ${formatNumber(job.summary.modelsWithPhoto || 0)} s fotkou</small>`
+                            : ""
+                        }
+                      </button>
+                    `,
+                  )
+                  .join("")
+              : `<p class="notice">Zatím není uložená žádná úloha.</p>`
+          }
+        </div>
+      </section>
+      ${
+        selected
+          ? `<section class="panel">
+              <div class="panel-header">
+                <div class="panel-title">
+                  <strong>Log úlohy ${escapeHtml(selected.id)}</strong>
+                  <span>${escapeHtml(selected.error || selected.step || "")}</span>
+                </div>
+                <div class="panel-tools">
+                  <button class="ghost-button" data-job-log="${escapeHtml(selected.id)}">Načíst log</button>
+                </div>
+              </div>
+              <pre class="job-log">${escapeHtml(state.selectedJobLog || "Vyber log nebo obnov úlohy.")}</pre>
+            </section>`
+          : ""
+      }
+    </div>
+  `;
+}
+
+async function apiFetch(path, options = {}) {
+  const headers = { ...(options.headers || {}) };
+  if (options.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+  if (state.adminToken) headers["X-Admin-Token"] = state.adminToken;
+  const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const contentType = response.headers.get("content-type") || "";
+  const payload = contentType.includes("application/json") ? await response.json() : await response.text();
+  if (!response.ok) {
+    throw new Error(typeof payload === "string" ? payload : payload.error || `API chyba ${response.status}`);
+  }
+  return payload;
+}
+
+async function loadJobs() {
+  try {
+    state.jobsError = "";
+    const payload = await apiFetch("/jobs");
+    state.jobs = payload.jobs || [];
+    state.jobsLoaded = true;
+    if (!state.selectedJobId && state.jobs.length) state.selectedJobId = state.jobs[0].id;
+    render();
+  } catch (error) {
+    state.jobsError = error.message;
+    state.jobsLoaded = true;
+    render();
+  }
+}
+
+async function loadJobLog(jobId) {
+  try {
+    state.jobsError = "";
+    state.selectedJobId = jobId;
+    state.selectedJobLog = await apiFetch(`/jobs/${encodeURIComponent(jobId)}/log`);
+    render();
+  } catch (error) {
+    state.jobsError = error.message;
+    render();
+  }
+}
+
+async function startYearJob() {
+  try {
+    state.jobsError = "";
+    localStorage.setItem("f1-admin-token", state.adminToken);
+    const payload = await apiFetch("/jobs/start", {
+      method: "POST",
+      body: JSON.stringify({
+        season: state.jobSeason,
+        photoLimit: Number(state.jobPhotoLimit || 250),
+        fullCatalog: state.jobFullCatalog,
+      }),
+    });
+    state.selectedJobId = payload.job.id;
+    state.selectedJobLog = "Úloha spuštěna. Log se začne plnit po prvních krocích.";
+    await loadJobs();
+  } catch (error) {
+    state.jobsError = error.message;
+    render();
+  }
+}
+
 function renderMain() {
   if (state.view === "dashboard") return renderDashboard();
   if (state.view === "season") return renderSeason();
   if (state.view === "collection") return renderCollection();
   if (state.view === "candidates") return renderCandidates();
+  if (state.view === "jobs") return renderJobs();
   return `<div class="main-stack">${renderCatalogPanel("Master Catalog", 900)}</div>`;
 }
 
@@ -885,6 +1060,9 @@ function render() {
 
 function wireEvents() {
   decorateCollectionSortHeaders();
+  if (state.view === "jobs" && !state.jobsLoaded) {
+    loadJobs();
+  }
   document.querySelectorAll("[data-sort-column]").forEach((button) => {
     button.addEventListener("click", () => {
       pendingCollectionScroll = { top: 0, left: 0, windowX: window.scrollX, windowY: window.scrollY };
@@ -970,7 +1148,36 @@ function wireEvents() {
       if (button.dataset.action === "refresh") {
         location.reload();
       }
+      if (button.dataset.action === "refreshJobs") {
+        state.jobsLoaded = false;
+        loadJobs();
+      }
+      if (button.dataset.action === "startYearJob") {
+        startYearJob();
+      }
     });
+  });
+  document.querySelectorAll("[data-job-field]").forEach((field) => {
+    field.addEventListener("input", () => {
+      const key = field.dataset.jobField;
+      state[key] = field.type === "checkbox" ? field.checked : field.value;
+      if (key === "adminToken") localStorage.setItem("f1-admin-token", state.adminToken);
+    });
+    field.addEventListener("change", () => {
+      const key = field.dataset.jobField;
+      state[key] = field.type === "checkbox" ? field.checked : field.value;
+      if (key === "adminToken") localStorage.setItem("f1-admin-token", state.adminToken);
+    });
+  });
+  document.querySelectorAll("[data-job-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedJobId = button.dataset.jobId;
+      state.selectedJobLog = "";
+      render();
+    });
+  });
+  document.querySelectorAll("[data-job-log]").forEach((button) => {
+    button.addEventListener("click", () => loadJobLog(button.dataset.jobLog));
   });
   document.querySelectorAll("[data-photo-form]").forEach((form) => {
     form.addEventListener("submit", (event) => {

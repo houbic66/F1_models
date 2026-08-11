@@ -84,7 +84,7 @@ Run as `root` or with `sudo`:
 
 ```bash
 apt update
-apt install -y git nginx
+apt install -y git nginx python3-venv
 mkdir -p /var/www/f1-models
 chown -R www-data:www-data /var/www/f1-models
 ```
@@ -105,6 +105,30 @@ ln -s /etc/nginx/sites-available/f1-models /etc/nginx/sites-enabled/f1-models
 rm -f /etc/nginx/sites-enabled/default
 nginx -t
 systemctl reload nginx
+```
+
+Install the background job service:
+
+```bash
+mkdir -p /etc/f1-models
+TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+printf "F1_ADMIN_TOKEN=%s\nF1_JOB_HOST=127.0.0.1\nF1_JOB_PORT=8765\n" "$TOKEN" > /etc/f1-models/job-server.env
+chmod 600 /etc/f1-models/job-server.env
+
+python3 -m venv /var/www/f1-models/venv
+/var/www/f1-models/venv/bin/python -m pip install --upgrade pip
+/var/www/f1-models/venv/bin/python -m pip install -r /var/www/f1-models/repo/app/backend/requirements.txt
+
+cp /var/www/f1-models/repo/deploy/hetzner/f1-jobs.service /etc/systemd/system/f1-jobs.service
+systemctl daemon-reload
+systemctl enable f1-jobs.service
+systemctl restart f1-jobs.service
+```
+
+Show the admin token used by the `Úlohy` tab:
+
+```bash
+cat /etc/f1-models/job-server.env
 ```
 
 Open firewall if needed:
@@ -148,6 +172,8 @@ Or use:
 ```bash
 bash /var/www/f1-models/repo/deploy/hetzner/deploy.sh
 ```
+
+The deploy script also updates/restarts the background job service and keeps the existing admin token.
 
 ## Domain
 

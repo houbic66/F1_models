@@ -11,6 +11,8 @@ tmp_image_check/
 # Generated app data and scraped page cache
 app/data/*.json
 app/data/photo_page_cache/
+app/data/backups/
+app/data/jobs/
 
 # Python
 __pycache__/
