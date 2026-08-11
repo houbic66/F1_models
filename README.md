@@ -52,6 +52,14 @@ Then open:
 http://127.0.0.1:4173/#/collection
 ```
 
+## Hetzner Deployment
+
+Deployment notes for a clean Hetzner VPS are in:
+
+```text
+deploy/hetzner/README.md
+```
+
 ## Data Policy
 
 The following are intentionally not committed to the public repository:
@@ -83,4 +91,3 @@ For a public demo or cloud deployment, create a sanitized sample dataset or conn
 - Generate per-year audit reports.
 - Add backend/database storage for cloud use.
 - Add sanitized public sample data for GitHub demo deployment.
-
