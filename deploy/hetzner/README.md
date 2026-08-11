@@ -11,6 +11,50 @@ The public GitHub repository contains only source code and documentation. Privat
 
 For a working production app, copy the generated JSON data to the server after the source code is deployed.
 
+## Create The Hetzner Server
+
+1. Sign in to Hetzner Cloud Console:
+
+```text
+https://console.hetzner.cloud/
+```
+
+2. Create a new project, for example:
+
+```text
+F1 Models
+```
+
+3. Create a new server with these settings:
+
+```text
+Location: Germany or Finland
+Image: Ubuntu 24.04 LTS
+Type: Shared vCPU, smallest x86 plan with at least 2 vCPU / 4 GB RAM / 40 GB disk
+Networking: IPv4 enabled
+SSH key: your local SSH key, or password login if you do not have a key yet
+Name: f1-models
+Backups: optional
+```
+
+The app is currently a static web app served by Nginx, so it does not need a large server. If a backend database or automated scraping worker is added later, the same server can be resized.
+
+4. After the server is created, Hetzner will show the server IP address. Use that IP as `SERVER_IP` in the commands below.
+
+5. If you used password login, copy the temporary root password from the Hetzner email or console.
+
+Connect from Windows PowerShell:
+
+```powershell
+ssh root@SERVER_IP
+```
+
+The first login may ask whether to trust the server fingerprint. Type:
+
+```text
+yes
+```
+
 ## Server Layout
 
 Recommended paths:
@@ -135,4 +179,3 @@ systemctl reload nginx
 ```
 
 HTTPS can be added later with Certbot.
-
