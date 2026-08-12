@@ -843,6 +843,28 @@ Aukce a fora:
 - archivni prodejni stranky,
 - pouzit hlavne pro fotky a potvrzeni existence, ne jako jediny zdroj vyrobniho kodu, pokud je kod nejisty.
 
+### Matice vyrobcu pro katalog a fotky
+
+Kazdy vyrobce musi mit vlastni pravidlo pro kod, zdroje a fallback fotek.
+
+| Vyrobce | Katalogovy kod | Primarni katalog | Primarni fotka | Fallback fotky |
+| --- | --- | --- | --- | --- |
+| Spark | `S1234` | Spark official API | Spark/Minimax funkcni varianty `-desktop-1x.avif`, `-desktop-1x.webp` | GrandPrixModels, DiecastLegends, Raceland, Carmodel, eBay |
+| Minichamps | 9 cislic | Minichamps/143diecast/archivni Minichamps zdroje | 143diecast galerie nebo Minichamps produkt | GrandPrixModels, DiecastLegends, CK, eBay |
+| Looksmart | `LSF...`, `LSRC...` | Looksmart official | Looksmart produkt | GrandPrixModels, Carmodel, CK, eBay |
+| TSM / TrueScale | `TSM...` nebo overeny TSM kod | TSM/TrueScale official, GrandPrixModels | GrandPrixModels/TSM produkt | Raceland, Carmodel, CK |
+| Quartzo | `Q...`, `QFC...` | F1 Scale Models, specializovani prodejci | produktova stranka prodejce | eBay, Carmodel, Raceland, ModelCarSales |
+| Onyx | `ONYX...` nebo overeny kod | F1 Scale Models, specializovani prodejci | produktova stranka prodejce | eBay, ModelCarSales, forum |
+| Ebbro | overeny Ebbro kod | Ebbro/prodejci | produktova stranka prodejce | eBay, Carmodel, CK |
+| Brumm | `R...`, `P...` | Brumm/prodejci/F1 Scale Models | Brumm nebo produktova stranka | Carmodel, eBay, DiecastLegends, ModelCarSales |
+| Hot Wheels / La Storia | Mattel/La Storia kod | F1 Scale Models/prodejci | produktova stranka prodejce | eBay, Carmodel, fora |
+| GP Replicas | `GP...` | GP Replicas/prodejci | produktova stranka prodejce | CK, Carmodel, GrandPrixModels |
+| BBR | `BBR...` | BBR/prodejci | produktova stranka prodejce | CK, Carmodel |
+| IXO / Altaya / DeAgostini | partwork kod nebo overeny prodejni kod | partwork/prodejci | produktova stranka | eBay, ModelCarSales |
+| Tecnomodel / CMR / Werk83 / Solido | kod vyrobce | oficialni/prodejci | produktova stranka | CK, Raceland, Carmodel |
+
+Pokud model pochazi pouze z PDF bez obrazku, stav fotky musi byt `missing` a musi vzniknout radek v auditnim seznamu `photo_audit_problem_rows.json`.
+
 ### Stav fotek
 
 Kazdy model musi mit tato pole:
@@ -915,6 +937,7 @@ Aktualni backend MVP umi spustit proces, ale cilova verze musi pridat:
 
 - Sjednotit rocni import do `app/scripts/build_year.py`.
 - Doplnit oficialni Minichamps importer.
+- Doplnit Carmodel importer jako povinny fallback pro Brumm, Hot Wheels/La Storia, Quartzo, Onyx a starsi vyrobce.
 - Automatizovat fallback fotek pro Spark pri 403.
 - Automatizovat overovani fotek po importu.
 - Zavest per-year audit JSON/CSV.

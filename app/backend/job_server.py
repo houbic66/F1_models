@@ -21,6 +21,7 @@ APP_DIR = ROOT / "app"
 DATA_DIR = APP_DIR / "data"
 JOBS_DIR = DATA_DIR / "jobs"
 BACKUP_DIR = DATA_DIR / "backups"
+YEAR_RUNS_DIR = ROOT / "outputs" / "year_runs"
 PYTHON = sys.executable
 HOST = os.environ.get("F1_JOB_HOST", "127.0.0.1")
 PORT = int(os.environ.get("F1_JOB_PORT", "8765"))
@@ -131,7 +132,12 @@ def summarize_year(season: str) -> dict:
     data = json.loads(app_data.read_text(encoding="utf-8"))
     models = [row for row in data.get("models", []) if str(row.get("season")) == season]
     collection = [row for row in data.get("collection", []) if str(row.get("season")) == season]
-    with_photo = sum(
+    audit_path = YEAR_RUNS_DIR / str(season) / "photo_audit.json"
+    photo_status = {}
+    if audit_path.exists():
+        audit = json.loads(audit_path.read_text(encoding="utf-8"))
+        photo_status = audit.get("byStatus", {}) if isinstance(audit, dict) else {}
+    with_photo = int(photo_status.get("verified", 0)) if photo_status else sum(
         1
         for row in models
         if row.get("mainPhoto") or any(str(url or "").strip() for url in row.get("photoUrls", []))
@@ -141,6 +147,7 @@ def summarize_year(season: str) -> dict:
         "collectionRows": len(collection),
         "modelsWithPhoto": with_photo,
         "missingPhotos": max(len(models) - with_photo, 0),
+        "photoStatus": photo_status,
     }
 
 
@@ -168,6 +175,7 @@ def run_year_job(job_id: str) -> None:
             [PYTHON, "app/scripts/discover_model_photos.py", "--season", season, "--limit", str(photo_limit)],
         )
         run_command(job, "Obnova dat aplikace po fotkach", [PYTHON, "app/scripts/prepare_app_data.py"])
+        run_command(job, "Audit realne dostupnosti fotek", [PYTHON, "app/scripts/audit_year_photos.py", "--season", season])
 
         job["summary"] = summarize_year(season)
         append_log(job_id, f"Hotovo: {json.dumps(job['summary'], ensure_ascii=False)}")

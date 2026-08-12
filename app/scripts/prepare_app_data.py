@@ -181,6 +181,10 @@ def normalize_photo_record(value: Any) -> dict[str, Any]:
             "thumbnails": urls[1:],
             "originalPhotoUrl": urls[0] if urls else "",
             "sourcePageUrl": "",
+            "photoStatus": "verified" if urls else "missing",
+            "photoCheckedAt": "",
+            "photoHttpStatus": "",
+            "photoContentType": "",
         }
     if isinstance(value, dict):
         thumbnails = value.get("thumbnails", [])
@@ -194,8 +198,21 @@ def normalize_photo_record(value: Any) -> dict[str, Any]:
             "thumbnails": thumbnails,
             "originalPhotoUrl": original,
             "sourcePageUrl": clean(value.get("sourcePageUrl") or value.get("source") or ""),
+            "photoStatus": clean(value.get("photoStatus")) or ("verified" if main else "missing"),
+            "photoCheckedAt": clean(value.get("photoCheckedAt")),
+            "photoHttpStatus": clean(value.get("photoHttpStatus")),
+            "photoContentType": clean(value.get("photoContentType")),
         }
-    return {"mainPhoto": "", "thumbnails": [], "originalPhotoUrl": "", "sourcePageUrl": ""}
+    return {
+        "mainPhoto": "",
+        "thumbnails": [],
+        "originalPhotoUrl": "",
+        "sourcePageUrl": "",
+        "photoStatus": "missing",
+        "photoCheckedAt": "",
+        "photoHttpStatus": "",
+        "photoContentType": "",
+    }
 
 
 def load_photo_overrides() -> dict[str, dict[str, Any]]:
@@ -203,6 +220,10 @@ def load_photo_overrides() -> dict[str, dict[str, Any]]:
         return {}
     raw = json.loads(PHOTO_OVERRIDES_PATH.read_text(encoding="utf-8"))
     return {clean(key): normalize_photo_record(value) for key, value in raw.items()}
+
+
+def photo_urls(photo_record: dict[str, Any]) -> list[str]:
+    return [url for url in [photo_record.get("mainPhoto", ""), *photo_record.get("thumbnails", [])] if clean(url)]
 
 
 def collection_display_status(quantity: int, nv: int, v: int, code: str) -> str:
@@ -271,7 +292,11 @@ def load_collection(photo_overrides: dict[str, dict[str, Any]]) -> list[dict[str
                 "thumbnails": photo_record["thumbnails"],
                 "originalPhotoUrl": photo_record["originalPhotoUrl"],
                 "photoSourcePageUrl": photo_record["sourcePageUrl"],
-                "photoUrls": [photo_record["mainPhoto"], *photo_record["thumbnails"]],
+                "photoStatus": photo_record["photoStatus"],
+                "photoCheckedAt": photo_record["photoCheckedAt"],
+                "photoHttpStatus": photo_record["photoHttpStatus"],
+                "photoContentType": photo_record["photoContentType"],
+                "photoUrls": photo_urls(photo_record),
             }
         )
     return items
@@ -421,7 +446,11 @@ def copy_model_photo_to_collection(item: dict[str, Any], model: dict[str, Any]) 
     item["thumbnails"] = model.get("thumbnails", [])
     item["originalPhotoUrl"] = model.get("originalPhotoUrl") or model.get("mainPhoto", "")
     item["photoSourcePageUrl"] = model.get("photoSourcePageUrl", "")
-    item["photoUrls"] = [item["mainPhoto"], *item["thumbnails"]]
+    item["photoStatus"] = model.get("photoStatus", "missing")
+    item["photoCheckedAt"] = model.get("photoCheckedAt", "")
+    item["photoHttpStatus"] = model.get("photoHttpStatus", "")
+    item["photoContentType"] = model.get("photoContentType", "")
+    item["photoUrls"] = [url for url in [item["mainPhoto"], *item["thumbnails"]] if clean(url)]
 
 
 def enrich_collection_photos(collection: list[dict[str, Any]], models: list[dict[str, Any]]) -> None:
@@ -559,12 +588,16 @@ def build_catalog(photo_overrides: dict[str, dict[str, Any]]) -> tuple[list[dict
                 existing["sourceUrls"] = merge_unique(existing.get("sourceUrls", []), base["sourceUrls"])
                 if duplicate_photo_record["sourcePageUrl"]:
                     existing["sourceUrls"] = merge_unique(existing["sourceUrls"], [duplicate_photo_record["sourcePageUrl"]])
-                existing["photoUrls"] = merge_unique(existing.get("photoUrls", []), [duplicate_photo_record["mainPhoto"], *duplicate_photo_record["thumbnails"]])
+                existing["photoUrls"] = merge_unique(existing.get("photoUrls", []), photo_urls(duplicate_photo_record))
                 existing["thumbnails"] = merge_unique(existing.get("thumbnails", []), duplicate_photo_record["thumbnails"])
                 if not existing.get("mainPhoto") and duplicate_photo_record["mainPhoto"]:
                     existing["mainPhoto"] = duplicate_photo_record["mainPhoto"]
                     existing["originalPhotoUrl"] = duplicate_photo_record["originalPhotoUrl"]
                     existing["photoSourcePageUrl"] = duplicate_photo_record["sourcePageUrl"]
+                    existing["photoStatus"] = duplicate_photo_record["photoStatus"]
+                    existing["photoCheckedAt"] = duplicate_photo_record["photoCheckedAt"]
+                    existing["photoHttpStatus"] = duplicate_photo_record["photoHttpStatus"]
+                    existing["photoContentType"] = duplicate_photo_record["photoContentType"]
                 if base["sourceName"] and base["sourceName"] not in existing.get("sourceName", ""):
                     existing["sourceName"] = " | ".join([part for part in [existing.get("sourceName", ""), base["sourceName"]] if part])
                 continue
@@ -592,7 +625,11 @@ def build_catalog(photo_overrides: dict[str, dict[str, Any]]) -> tuple[list[dict
                     "thumbnails": photo_record["thumbnails"],
                     "originalPhotoUrl": photo_record["originalPhotoUrl"],
                     "photoSourcePageUrl": photo_record["sourcePageUrl"],
-                    "photoUrls": [photo_record["mainPhoto"], *photo_record["thumbnails"]],
+                    "photoStatus": photo_record["photoStatus"],
+                    "photoCheckedAt": photo_record["photoCheckedAt"],
+                    "photoHttpStatus": photo_record["photoHttpStatus"],
+                    "photoContentType": photo_record["photoContentType"],
+                    "photoUrls": photo_urls(photo_record),
                     **base,
                     "sourceUrls": model_source_urls,
                 }

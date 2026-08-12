@@ -673,6 +673,32 @@ tr.selected-row > td {
   object-fit: cover;
 }
 
+.photo-main.broken-photo {
+  display: none;
+}
+
+.photo-missing {
+  display: grid;
+  width: 100%;
+  min-height: 260px;
+  aspect-ratio: 5 / 3;
+  place-content: center;
+  gap: 8px;
+  padding: 28px;
+  background: #f6f8f9;
+  color: var(--muted);
+  text-align: center;
+}
+
+.photo-missing strong {
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.photo-missing span {
+  font-size: 13px;
+}
+
 .thumbnail-strip {
   display: grid;
   grid-auto-rows: 58px;

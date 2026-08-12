@@ -788,15 +788,23 @@ function renderDetail() {
     return `<aside class="detail"><div class="detail-empty">Žádný model k zobrazení</div></aside>`;
   }
   const photos = getPhotos(model);
-  const photo = photos[0] || PLACEHOLDER;
+  const hasPhoto = photos.length > 0;
+  const photo = photos[0] || "";
   const originalPhoto = model.originalPhotoUrl || photo;
   const sources = detailSources(model, collectionItem);
   return `
     <aside class="detail">
       <div class="photo-stage ${photos.length > 1 ? "has-thumbs" : ""}">
-        <button class="photo-main" data-original-photo="${escapeHtml(originalPhoto)}" title="Dvojklik otevře původní velikost">
-          <img src="${escapeHtml(photo)}" alt="${escapeHtml(model.title)}" onerror="this.src='${PLACEHOLDER}'" />
-        </button>
+        ${
+          hasPhoto
+            ? `<button class="photo-main" data-original-photo="${escapeHtml(originalPhoto)}" title="Dvojklik otevře původní velikost">
+                <img src="${escapeHtml(photo)}" alt="${escapeHtml(model.title)}" onerror="this.closest('.photo-main').classList.add('broken-photo')" />
+              </button>`
+            : `<div class="photo-missing">
+                <strong>Fotka modelu chybí</strong>
+                <span>${escapeHtml(model.manufacturer)} · ${escapeHtml(model.catalogNumber)}</span>
+              </div>`
+        }
         ${
           photos.length > 1
             ? `<div class="thumbnail-strip">

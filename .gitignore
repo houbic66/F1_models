@@ -2,6 +2,7 @@
 input/
 originalni_soubor/
 outputs/
+outputs/year_runs/
 tmp_image_check/
 *.xlsx
 *.xls
