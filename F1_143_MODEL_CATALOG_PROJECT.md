@@ -731,6 +731,186 @@ Private data nutna pro rocnikove joby:
 
 Tyto soubory nejsou v public GitHubu a musi se na server nahravat zvlast.
 
+## CIL: kompletni doplneni jednoho rocniku - proces v2
+
+Tento proces je cilovy standard pro kazdy dalsi rocnik. Nesmime ho brat jako "najdi par modelu", ale jako kontrolovany importni/auditni beh, ktery vytvori nezavisly katalog vsech znamych F1 1:43 modelu pro rok a az potom ho porovna s osobni sbirkou.
+
+### Definice hotoveho rocniku
+
+Rocnik je hotovy pouze tehdy, kdyz jsou splnene vsechny body:
+
+- master katalog rocniku vznikl nezavisle na osobni sbirce,
+- vsechny relevantni F1 1:43 modely maji vyrobce a katalogovy kod, pokud model realne katalogovy kod ma,
+- radky bez kodu jsou oddelene jako kandidati, ne jako potvrzeny katalog,
+- u kazdeho modelu jsou ulozene vsechny zdroje se 100% shodou,
+- u kazdeho modelu je stav fotky: `verified`, `missing`, `blocked`, `manual_needed`,
+- zadny model nesmi byt povazovan za "s fotkou", pokud hlavni obrazek neprosel HTTP kontrolou a neni to skutecny obrazek,
+- pro rocnik existuje audit: pocty podle vyrobce, pocty bez fotky, pocty kandidatu, podezrele duplicity, chybne kody,
+- az posledni krok je porovnani proti osobni sbirce a prirazeni stavu `V`, `NV`, `chybi`, `NO MODEL`.
+
+### Datovy tok
+
+1. `collect_sources`
+   - nacist zdroje vyrobcu, prodejcu, PDF, aukci a for,
+   - ulozit surova data do cache,
+   - u kazdeho zaznamu ulozit `source_name`, `source_url`, `raw_title`, datum importu.
+
+2. `normalize_catalog`
+   - vyrobit jednotny modelovy zaznam,
+   - normalizovat rok, vyrobce, kod, meritko, konstrukter, typ, jezdec, cislo, zavod/verzi,
+   - vyradit mimo-F1 a mimo-1/43.
+
+3. `validate_codes`
+   - Spark: pouze `S` + 4 cisla, varianty `SPK1234`, `SP1234`, `RS1234` se normalizuji na spravny tvar jen pokud pravidlo dovoluje,
+   - Minichamps: primarne devitimistny kod; cizi skladove kody prodejcu nejsou Minichamps kod,
+   - Looksmart: typicky `LSF...`, `LSRC...`, pripadne dalsi overene rodiny kodu,
+   - TSM/TrueScale: `TSM...` nebo overeny kod vyrobce,
+   - Brumm: `R...`, `P...` podle zdroju,
+   - Hot Wheels: ciselne/mattel kody pouze pokud zdroj potvrzuje model,
+   - Raceland, Romu Romu, CK, eBay a prodejci mohou mit vlastni skladove kody, ale ty nesmi prepisovat kod vyrobce.
+
+4. `dedupe`
+   - primarni klic: `manufacturer + canonical_model_code`,
+   - sekundarni klic pouze pro kandidaty: rok + auto + jezdec + cislo + zavod/verze,
+   - sloucit zdroje se 100% shodou,
+   - nikdy nesloucit ruzne zavody/verze jen proto, ze maji stejne auto a jezdce.
+
+5. `photo_discovery`
+   - nejdrive oficialni zdroj vyrobce,
+   - potom prodejci s produktovou strankou,
+   - potom aukce/eBay/prodejni fora,
+   - potom manualni kandidat.
+
+6. `photo_verify`
+   - hlavni fotka musi vratit HTTP 200,
+   - `Content-Type` musi byt `image/*`,
+   - prazdny retezec, PDF URL nebo HTML stranka se nesmi pocitat jako fotka,
+   - obrazek musi byt dostupny i z prohlizece; u hotlink blokovani se ulozi funkcni varianta nebo se fotka oznaci `blocked`,
+   - Spark/Minimax: API vraci nefunkcni `...uuid.webp`, verejne funkcni tvar je typicky `...uuid-desktop-1x.avif` nebo `...uuid-desktop-1x.webp`,
+   - v aplikaci se jako fotka pocita pouze `mainPhoto`, ne `sourceUrls`.
+
+7. `championship_context`
+   - nacist finalni poradi jezdcu z Wikipedie/FIA zdroje,
+   - ulozit `D`, `DP`, `T`, `TP`,
+   - v rocnim prehledu razit defaultne podle poradi jezdce,
+   - body zobrazovat vedle poradi jako napr. `4 / 34 b.`.
+
+8. `collection_match`
+   - osobni sbirka se nacte az zde,
+   - presny kod ma prednost,
+   - potom pravdepodobna shoda podle rok + vyrobce + jezdec + auto + cislo + zavod,
+   - rozdily jmen se normalizuji: diakritika, obracene poradi jmena, iniciály, `jr`,
+   - vysledny stav radku je podbarveni: vitrína zelene, mimo vitrínu bile, chybi zlute, NO MODEL cervene.
+
+9. `audit_report`
+   - vygenerovat rocni audit JSON/CSV,
+   - seznam modelu bez fotky,
+   - seznam modelu bez kodu,
+   - seznam podezrelych duplicit,
+   - seznam modelu s fotkou `blocked/manual_needed`,
+   - seznam kandidatu proti sbirce.
+
+10. `publish`
+   - aktualizovat verejna data aplikace az po kontrole auditu,
+   - pred publikaci zalozit zalohu,
+   - po publikaci overit web, API a minimalne vzorek fotek.
+
+### Povinne zdroje podle typu
+
+Oficialni/primarni:
+
+- Spark official API,
+- Minichamps oficialni katalog nebo overene archivni Minichamps stranky,
+- Looksmart official,
+- TSM/TrueScale official,
+- BBR/GP Replicas/Brumm official, pokud dostupne.
+
+Specializovani prodejci a katalogy:
+
+- GrandPrixModels,
+- DiecastLegends,
+- Raceland,
+- Carmodel,
+- CK Modelcars,
+- Replicarz,
+- Miniatures-Minichamps,
+- F1 Scale Models stocklist.
+
+Aukce a fora:
+
+- eBay,
+- specializovana prodejni fora,
+- archivni prodejni stranky,
+- pouzit hlavne pro fotky a potvrzeni existence, ne jako jediny zdroj vyrobniho kodu, pokud je kod nejisty.
+
+### Stav fotek
+
+Kazdy model musi mit tato pole:
+
+- `mainPhoto` - URL hlavniho nahledu, pouze pokud overeno,
+- `thumbnails` - dalsi overene nahledy,
+- `originalPhotoUrl` - originalni velikost nebo nejvetsi overena varianta,
+- `photoSourcePageUrl` - stranka, odkud fotka pochazi,
+- `photoStatus` - `verified`, `missing`, `blocked`, `manual_needed`,
+- `photoCheckedAt` - cas posledni kontroly,
+- `photoHttpStatus` - posledni HTTP stav,
+- `photoContentType` - napr. `image/jpeg`, `image/avif`.
+
+Pravidla:
+
+- `modelsWithPhoto` v job summary smi pocitat pouze `photoStatus=verified`,
+- PDF ani prazdny string se nesmi objevit v `photoUrls`,
+- pokud zdroj blokuje hotlink, model nesmi tvarit, ze ma fotku; musi byt `blocked` nebo se musi ulozit funkcni kopie/varianta.
+
+### UI pozadavky pro roky a sbirku
+
+Rocni/sbirkovy prehled:
+
+- vlevo detail vybraneho modelu,
+- vpravo tabulka,
+- klik na radek nesmi posouvat tabulku nahoru,
+- vybrany radek musi byt zvyrazneny,
+- tabulka pro vybrany rok ma razeni podle `Poradi`, `C.`, `Model`, `Jezdec`, `PC`, `V/NV`,
+- defaultni razeni je podle poradi jezdce v sampionatu,
+- sloupce `PC` a `V/NV` jsou uzke,
+- posledni sloupec je pouze `V/NV`, bez textoveho stavu,
+- stav je vyjadren podbarvenim radku.
+
+Detail vlevo:
+
+- hlavni fotka nahore,
+- thumbnaily vedle hlavni fotky,
+- pod fotkou stejny barevny stav jako v tabulce,
+- shrnuti ve tvaru: `1982 Spark Williams FW08 K.Rosberg #6; 1982, Swiss GP`,
+- pod tim ctyri pole: `Vyrobce`, `Kod`, `Kusy`, `V/NV`,
+- ponechat pole pro pridani fotky,
+- zdroje maji byt v samostatnem scrollovacim poli,
+- leva cast nema byt delsi nez prava; scrollovat smi hlavne zdroje.
+
+### Backend pozadavky pro dalsi verzi
+
+Aktualni backend MVP umi spustit proces, ale cilova verze musi pridat:
+
+- jeden sjednoceny skript `app/scripts/build_year.py`,
+- samostatny krok `verify_model_photos.py`,
+- `photoStatus` a HTTP audit fotek,
+- per-year vystupy `outputs/year_runs/YEAR/`,
+- tlacitko `Publikovat` az po kontrole,
+- tlacitko `Stahnout audit`,
+- moznost znovu spustit jen fotky,
+- moznost znovu spustit jen Spark/Minichamps/Carmodel,
+- odstraneni falesnych pozitiv v job summary,
+- evidenci zdroju se 100% shodou.
+
+### Kriticke zkusenosti z 1979-1982
+
+- Spark API je velmi cenne pro katalog i fotky, ale jeho `primary_image_url` neni primo pouzitelny; musi se prevest na funkcni varianty `-desktop-1x.avif` / `-desktop-1x.webp`.
+- Minichamps se dobre doplnuje z 143diecast cache, ale nesmi se brat F2/F3/Formula Ford jako F1.
+- F1 Scale Models PDF je dobre pro existenci a kody, ale nema fotky; nesmi se pocitat jako fotkovy zdroj.
+- eBay cast muze vracet 403; job musi umet fallback a nesmi kvuli eBay spadnout.
+- `photoUrls` s prazdnym stringem nesmi navysovat pocet modelu s fotkou.
+- Osobni sbirka nesmi ridit katalog, protoze jinak chybi tisice modelu a variant.
+
 ## Otevrene ukoly
 
 - Sjednotit rocni import do `app/scripts/build_year.py`.
