@@ -131,7 +131,11 @@ def summarize_year(season: str) -> dict:
     data = json.loads(app_data.read_text(encoding="utf-8"))
     models = [row for row in data.get("models", []) if str(row.get("season")) == season]
     collection = [row for row in data.get("collection", []) if str(row.get("season")) == season]
-    with_photo = sum(1 for row in models if row.get("mainPhoto") or row.get("photoUrls"))
+    with_photo = sum(
+        1
+        for row in models
+        if row.get("mainPhoto") or any(str(url or "").strip() for url in row.get("photoUrls", []))
+    )
     return {
         "models": len(models),
         "collectionRows": len(collection),

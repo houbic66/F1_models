@@ -31,6 +31,28 @@ def model_id(manufacturer: str, code: str) -> str:
     return f"{slug(manufacturer)}__{slug(code)}"
 
 
+def spark_image_variants(product: dict[str, Any]) -> list[str]:
+    image = clean(product.get("primary_image_url"))
+    photo_id = clean(product.get("photo_id"))
+    if not photo_id and image:
+        match = re.search(r"/published/([0-9a-f-]{36})(?:[.-]|$)", image, flags=re.I)
+        if match:
+            photo_id = match.group(1)
+    if not photo_id:
+        return [image] if image else []
+    base = f"https://minimax.fra1.cdn.digitaloceanspaces.com/published/{photo_id}"
+    return [
+        f"{base}-desktop-1x.avif",
+        f"{base}-desktop-2x.avif",
+        f"{base}-mobile-1x.avif",
+        f"{base}-desktop-1x.webp",
+    ]
+
+
+def is_bare_minimax_image(url: str) -> bool:
+    return bool(re.search(r"minimax\.fra1\.cdn\.digitaloceanspaces\.com/published/[0-9a-f-]{36}\.webp(?:$|\?)", clean(url), flags=re.I))
+
+
 def fetch_products(season: str) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     page = 1
@@ -173,19 +195,22 @@ def merge_photos(products: list[dict[str, Any]]) -> int:
     added = 0
     for product in products:
         code = clean(product.get("code"))
-        image = clean(product.get("primary_image_url"))
-        if not code or not image:
+        images = spark_image_variants(product)
+        if not code or not images:
             continue
         key = model_id("Spark", code)
         product_id = clean(product.get("product_id") or product.get("id"))
         source_url = SPARK_PRODUCT_URL + product_id if product_id else ""
         record = overrides.get(key)
-        if isinstance(record, dict) and (record.get("mainPhoto") or record.get("main")):
+        current = ""
+        if isinstance(record, dict):
+            current = clean(record.get("mainPhoto") or record.get("main"))
+        if current and not is_bare_minimax_image(current):
             continue
         overrides[key] = {
-            "mainPhoto": image,
-            "thumbnails": [],
-            "originalPhotoUrl": image,
+            "mainPhoto": images[0],
+            "thumbnails": images[1:],
+            "originalPhotoUrl": images[1] if len(images) > 1 else images[0],
             "sourcePageUrl": source_url,
         }
         added += 1
