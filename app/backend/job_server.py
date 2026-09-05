@@ -133,10 +133,19 @@ def summarize_year(season: str) -> dict:
     models = [row for row in data.get("models", []) if str(row.get("season")) == season]
     collection = [row for row in data.get("collection", []) if str(row.get("season")) == season]
     audit_path = YEAR_RUNS_DIR / str(season) / "photo_audit.json"
+    problem_path = YEAR_RUNS_DIR / str(season) / "photo_audit_problem_rows.json"
     photo_status = {}
+    photo_problems = []
+    photo_by_manufacturer = {}
     if audit_path.exists():
         audit = json.loads(audit_path.read_text(encoding="utf-8"))
-        photo_status = audit.get("byStatus", {}) if isinstance(audit, dict) else {}
+        if isinstance(audit, dict):
+            photo_status = audit.get("byStatus", {})
+            photo_by_manufacturer = audit.get("byManufacturer", {})
+    if problem_path.exists():
+        problem_rows = json.loads(problem_path.read_text(encoding="utf-8"))
+        if isinstance(problem_rows, list):
+            photo_problems = problem_rows[:80]
     with_photo = int(photo_status.get("verified", 0)) if photo_status else sum(
         1
         for row in models
@@ -148,6 +157,8 @@ def summarize_year(season: str) -> dict:
         "modelsWithPhoto": with_photo,
         "missingPhotos": max(len(models) - with_photo, 0),
         "photoStatus": photo_status,
+        "photoByManufacturer": photo_by_manufacturer,
+        "photoProblems": photo_problems,
     }
 
 
@@ -167,14 +178,15 @@ def run_year_job(job_id: str) -> None:
 
         run_command(job, "Import Minichamps z 143diecast cache", [PYTHON, "app/scripts/import_143diecast_minichamps.py"])
         run_command(job, "Import Spark official API", [PYTHON, "app/scripts/import_spark_official_f1.py", "--season", season])
-        run_command(job, "Sparovani katalogu se sbirkou", [PYTHON, "match_model_catalog.py"])
-        run_command(job, "Sestaveni dat aplikace", [PYTHON, "app/scripts/prepare_app_data.py"])
+        run_command(job, "Sestaveni pracovniho katalogu pro dohledani fotek", [PYTHON, "match_model_catalog.py"])
+        run_command(job, "Sestaveni pracovni aplikacni kopie", [PYTHON, "app/scripts/prepare_app_data.py"])
         run_command(
             job,
             "Dohledani fotek pro rocnik",
             [PYTHON, "app/scripts/discover_model_photos.py", "--season", season, "--limit", str(photo_limit)],
         )
-        run_command(job, "Obnova dat aplikace po fotkach", [PYTHON, "app/scripts/prepare_app_data.py"])
+        run_command(job, "Finalni porovnani katalogu se sbirkou", [PYTHON, "match_model_catalog.py"])
+        run_command(job, "Obnova dat aplikace po fotkach a porovnani", [PYTHON, "app/scripts/prepare_app_data.py"])
         run_command(job, "Audit realne dostupnosti fotek", [PYTHON, "app/scripts/audit_year_photos.py", "--season", season])
 
         job["summary"] = summarize_year(season)

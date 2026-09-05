@@ -1,6 +1,6 @@
 # F1 1:43 Model Catalog - projektovy dokument
 
-Posledni aktualizace: 2026-08-11
+Posledni aktualizace: 2026-09-05
 
 Tento soubor je zivy projektovy dokument. Pri kazde vetsi zmene aplikace, datove logiky, importu, pravidel parovani nebo cloudove architektury se ma aktualizovat. Ma slouzit jako hlavni brief pro GitHub, dalsi vyvoj a pozdejsi cloudove nasazeni.
 
@@ -130,6 +130,35 @@ Funkce pro dalsi rok ma fungovat takto:
 10. System overi aplikaci v prohlizeci.
 
 Osobni tabulka se nesmi pouzivat jako seed pro existenci modelu. Vyjimka: muze se pouzit jen jako seznam veci k finalnimu porovnani a jako upozorneni, ze nekde muze chybet model v master katalogu.
+
+## Funkce aplikace pro doplneni rocniku
+
+Rocnik se nema doplnovat pres Codex/ChatGPT rucnim spoustenim prikazu. Uzivatel ma mit v aplikaci samostatnou obrazovku `Doplnit rocnik`, kde zada rok, spusti proces a vidi vysledek.
+
+Aktualni implementace:
+
+- zalozka `Doplnit rocnik` pouziva backend `app/backend/job_server.py`,
+- spusteni je chranene admin tokenem,
+- backend vytvori zalohu zivych JSON dat pred kazdym behem,
+- job uklada metadata do `app/data/jobs/*.json`,
+- job uklada log do `app/data/jobs/*.log`,
+- frontend umi zobrazit seznam poslednich behu a nacist log,
+- po auditu fotek se do summary ukladaji i problemove radky z `outputs/year_runs/YEAR/photo_audit_problem_rows.json`.
+
+Uzivatelske zobrazeni `Doplnit rocnik` musi ukazovat:
+
+- pet kroku procesu: nezavisly katalog, fotky a zdroje, audit fotek, porovnani se sbirkou, aktualizace aplikace,
+- souhrn modelu v katalogu, modelu s overenou fotkou, modelu bez overene fotky a radku sbirky,
+- rozpad problemovych fotek podle vyrobce,
+- konkretni modely, ktere jeste nemaji overenou fotku nebo maji blokovany/neplatny obrazek,
+- log behu jen jako doplnkovou diagnostiku.
+
+Dulezita logika:
+
+- interni pracovni sestaveni dat muze byt potreba kvuli hledani fotek, ale finalni porovnani se sbirkou musi probehnout az po nezavislem katalogu a fotkach,
+- `modelsWithPhoto` smi pocitat pouze realne overene obrazky,
+- model bez fotky nesmi pouzit obecnou siluetu tak, aby vypadal jako hotova fotka modelu,
+- chybove a chybejici fotky musi zustat viditelne v aplikaci, aby bylo jasne, co dalsi importer jeste nepokryl.
 
 ## Navrhovany prikaz pro rocni import
 
@@ -915,8 +944,9 @@ Aktualni backend MVP umi spustit proces, ale cilova verze musi pridat:
 
 - jeden sjednoceny skript `app/scripts/build_year.py`,
 - samostatny krok `verify_model_photos.py`,
-- `photoStatus` a HTTP audit fotek,
+- `photoStatus` a HTTP audit fotek v job summary,
 - per-year vystupy `outputs/year_runs/YEAR/`,
+- seznam problemovych fotek primo v aplikaci,
 - tlacitko `Publikovat` az po kontrole,
 - tlacitko `Stahnout audit`,
 - moznost znovu spustit jen fotky,

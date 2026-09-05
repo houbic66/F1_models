@@ -1,4 +1,4 @@
-const DATA_URL = "./data/app-data.json?v=20260812-year-jobs-v1";
+const DATA_URL = "./data/app-data.json?v=20260905-year-builder-v1";
 const API_BASE = "/api";
 const PLACEHOLDER = "./assets/model-placeholder.svg";
 
@@ -40,7 +40,7 @@ const views = [
   ["season", "Roky"],
   ["catalog", "Katalog"],
   ["candidates", "Kandidáti"],
-  ["jobs", "Úlohy"],
+  ["jobs", "Doplnit ročník"],
 ];
 
 const collectionSortableColumns = [
@@ -894,6 +894,158 @@ function jobStatusColor(status) {
   return "yellow";
 }
 
+function photoStatusLabel(status) {
+  return {
+    verified: "Ověřená fotka",
+    missing: "Bez fotky",
+    blocked: "Blokovaný odkaz",
+    not_image: "Není obrázek",
+    error: "Chyba odkazu",
+  }[status] || status || "Neznámý stav";
+}
+
+function renderYearProcessSteps(selected) {
+  const runningStep = normalize(selected?.step || "");
+  const steps = [
+    ["catalog", "1", "Nezávislý katalog", "Výrobci, prodejci, aukce a katalogy bez použití osobní sbírky."],
+    ["photos", "2", "Fotky a zdroje", "Hlavní fotka, thumbnaily a odkazy napříč všemi výrobci."],
+    ["audit", "3", "Audit fotek", "Kontrola, že URL skutečně vrací obrázek a ne prázdnou stránku."],
+    ["match", "4", "Porovnání se sbírkou", "Osobní Excel se použije až na konci pro V, NV, Pc a shody."],
+    ["app", "5", "Aktualizace aplikace", "Přepočet katalogu, sbírky, kandidátů a detailů modelů."],
+  ];
+  return `
+    <div class="process-grid">
+      ${steps
+        .map(([key, number, title, text]) => {
+          const isActive =
+            (key === "catalog" && runningStep.includes("katalog")) ||
+            (key === "photos" && runningStep.includes("fotek")) ||
+            (key === "audit" && runningStep.includes("audit")) ||
+            (key === "match" && runningStep.includes("porovnani")) ||
+            (key === "app" && runningStep.includes("aplikac"));
+          return `
+            <article class="process-card ${isActive ? "active" : ""}">
+              <span>${number}</span>
+              <strong>${escapeHtml(title)}</strong>
+              <small>${escapeHtml(text)}</small>
+            </article>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function renderPhotoStatusBreakdown(summary) {
+  const byManufacturer = summary?.photoByManufacturer || {};
+  const makers = Object.entries(byManufacturer)
+    .map(([maker, counts]) => ({
+      maker,
+      verified: Number(counts.verified || 0),
+      missing: Number(counts.missing || 0),
+      blocked: Number(counts.blocked || 0),
+      notImage: Number(counts.not_image || 0),
+      error: Number(counts.error || 0),
+    }))
+    .filter((item) => item.missing || item.blocked || item.notImage || item.error)
+    .sort((a, b) => b.missing + b.blocked + b.notImage + b.error - (a.missing + a.blocked + a.notImage + a.error));
+  if (!makers.length) return `<p class="notice">U vybraného běhu nejsou evidované problémové fotky podle výrobce.</p>`;
+  return `
+    <div class="maker-photo-grid">
+      ${makers
+        .map(
+          (item) => `
+            <div class="maker-photo-card">
+              <strong>${escapeHtml(item.maker)}</strong>
+              <span>${formatNumber(item.verified)} OK</span>
+              <span>${formatNumber(item.missing + item.blocked + item.notImage + item.error)} k dořešení</span>
+            </div>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function renderJobSummary(selected) {
+  const summary = selected?.summary || {};
+  if (!selected) return "";
+  const photoStatus = summary.photoStatus || {};
+  const missing = Number(summary.missingPhotos || 0);
+  return `
+    <section class="panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <strong>Výsledek ročníku ${escapeHtml(selected.season)}</strong>
+          <span>${escapeHtml(selected.error || selected.step || "Souhrn posledního běhu")}</span>
+        </div>
+      </div>
+      <div class="job-summary-grid">
+        ${statCard("Modely v katalogu", summary.models || 0)}
+        ${statCard("S ověřenou fotkou", summary.modelsWithPhoto || 0)}
+        ${statCard("Bez ověřené fotky", missing)}
+        ${statCard("Řádky sbírky", summary.collectionRows || 0)}
+      </div>
+      <div class="status-strip">
+        ${Object.entries(photoStatus)
+          .map(([status, count]) => `<span class="pill ${status === "verified" ? "green" : "yellow"}">${escapeHtml(photoStatusLabel(status))}: ${formatNumber(count)}</span>`)
+          .join("") || `<span class="pill yellow">Audit fotek zatím není hotový</span>`}
+      </div>
+      ${renderPhotoStatusBreakdown(summary)}
+    </section>
+  `;
+}
+
+function renderPhotoProblemRows(selected) {
+  const rows = selected?.summary?.photoProblems || [];
+  if (!selected) return "";
+  return `
+    <section class="panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <strong>Modely k dohledání fotek</strong>
+          <span>${rows.length ? `${formatNumber(rows.length)} problémových řádků z auditu` : "V auditu nejsou uložené chybějící fotky"}</span>
+        </div>
+      </div>
+      <div class="table-wrap compact-table-wrap">
+        ${
+          rows.length
+            ? `<table class="problem-table">
+                <thead>
+                  <tr>
+                    <th>Rok</th>
+                    <th>Výrobce</th>
+                    <th>Kód</th>
+                    <th>Model</th>
+                    <th>Stav</th>
+                    <th>Zdroj</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rows
+                    .map((row) => {
+                      const firstSource = firstUrl(row.sourceUrls || []);
+                      return `
+                        <tr>
+                          <td>${escapeHtml(row.season)}</td>
+                          <td>${escapeHtml(row.manufacturer)}</td>
+                          <td><strong>${escapeHtml(row.catalogNumber)}</strong></td>
+                          <td>${escapeHtml(row.title)}</td>
+                          <td>${escapeHtml(photoStatusLabel(row.photoStatus))}</td>
+                          <td>${firstSource ? `<a href="${escapeHtml(firstSource)}" target="_blank" rel="noreferrer">otevřít</a>` : ""}</td>
+                        </tr>
+                      `;
+                    })
+                    .join("")}
+                </tbody>
+              </table>`
+            : `<p class="notice">Po doběhu auditu se tady objeví modely, které ještě potřebují dohledat fotku u výrobce nebo prodejce.</p>`
+        }
+      </div>
+    </section>
+  `;
+}
+
 function renderJobs() {
   const selected = state.jobs.find((job) => job.id === state.selectedJobId) || state.jobs[0] || null;
   const defaultSeason = state.jobSeason || (state.season !== "all" ? state.season : "1981");
@@ -902,8 +1054,8 @@ function renderJobs() {
       <section class="panel">
         <div class="panel-header">
           <div class="panel-title">
-            <strong>Doplnit ročník</strong>
-            <span>Nejprve nezávislý katalog, fotky a zdroje; sbírka se porovnává až nakonec.</span>
+            <strong>Doplnit kompletní ročník</strong>
+            <span>Nejprve nezávislý katalog a fotky, osobní sbírka se porovnává až ve finále.</span>
           </div>
           <div class="panel-tools">
             <button class="ghost-button" data-action="refreshJobs">Obnovit úlohy</button>
@@ -929,7 +1081,10 @@ function renderJobs() {
           <button class="primary-button" data-action="startYearJob">Spustit ročník</button>
         </div>
         ${state.jobsError ? `<p class="notice error">${escapeHtml(state.jobsError)}</p>` : ""}
+        ${renderYearProcessSteps(selected)}
       </section>
+      ${renderJobSummary(selected)}
+      ${renderPhotoProblemRows(selected)}
       <section class="panel">
         <div class="panel-header">
           <div class="panel-title">
@@ -949,7 +1104,7 @@ function renderJobs() {
                         <small>${escapeHtml(job.createdAt || "")}</small>
                         ${
                           job.summary && Object.keys(job.summary).length
-                            ? `<small>${formatNumber(job.summary.models || 0)} modelů · ${formatNumber(job.summary.modelsWithPhoto || 0)} s fotkou</small>`
+                            ? `<small>${formatNumber(job.summary.models || 0)} modelů · ${formatNumber(job.summary.modelsWithPhoto || 0)} s fotkou · ${formatNumber(job.summary.missingPhotos || 0)} chybí</small>`
                             : ""
                         }
                       </button>
