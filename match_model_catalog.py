@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import re
 import unicodedata
 from collections import Counter, defaultdict
@@ -12,7 +13,10 @@ from openpyxl import load_workbook
 from catalog_rules import canonical_match_code, infer_manufacturer, is_non_f1_model as rules_is_non_f1_model
 
 
-INPUT_WORKBOOK = Path("outputs") / "wiki_audit" / "Diecast 2026 - doplneno z auditu - body 1976-2025.xlsx"
+ROOT = Path(__file__).resolve().parent
+INPUT_WORKBOOK = Path(os.environ.get("F1_COLLECTION_WORKBOOK", str(ROOT / "input" / "Diecast 2026.xlsx")))
+if not INPUT_WORKBOOK.exists():
+    INPUT_WORKBOOK = ROOT / "outputs" / "wiki_audit" / "Diecast 2026 - doplneno z auditu - body 1976-2025.xlsx"
 RAW_CATALOG = Path("outputs") / "model_catalog" / "sourced_model_catalog_expanded_raw.json"
 OUT_DIR = Path("outputs") / "model_catalog"
 MATCHED_JSON = OUT_DIR / "all_f1_143_models_matched.json"
@@ -100,25 +104,30 @@ def owned_pc(value: str) -> bool:
 
 def load_collection() -> list[dict]:
     wb = load_workbook(INPUT_WORKBOOK, read_only=True, data_only=False)
-    ws = wb["Overview"]
-    rows = []
-    for idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
-        item = {
-            "row": idx,
-            "Year": clean(row[0]),
-            "Team": clean(row[1]),
-            "Car": clean(row[2]),
-            "Type": clean(row[3]),
-            "Nr": clean(row[4]),
-            "Driver": clean(row[5]),
-            "Brand": clean(row[6]),
-            "Extra": clean(row[7]),
-            "Pc": clean(row[12]),
-            "Code": clean(row[13]),
-        }
-        item["owned"] = owned_pc(item["Pc"])
-        rows.append(item)
-    return rows
+    try:
+        ws = wb["Overview"]
+        rows = []
+        for idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            if not any(clean(value) for value in row):
+                continue
+            item = {
+                "row": idx,
+                "Year": clean(row[0]),
+                "Team": clean(row[1]),
+                "Car": clean(row[2]),
+                "Type": clean(row[3]),
+                "Nr": clean(row[4]),
+                "Driver": clean(row[5]),
+                "Brand": clean(row[6]),
+                "Extra": clean(row[7]),
+                "Pc": clean(row[12]),
+                "Code": clean(row[13]),
+            }
+            item["owned"] = owned_pc(item["Pc"])
+            rows.append(item)
+        return rows
+    finally:
+        wb.close()
 
 
 def collection_indexes(rows: list[dict]) -> tuple[dict[str, list[dict]], dict[str, list[dict]]]:

@@ -1,4 +1,4 @@
-const DATA_URL = "./data/app-data.json?v=20260905-year-builder-v1";
+const DATA_URL = "./data/app-data.json?v=20261013-collection-refresh-v1";
 const API_BASE = "/api";
 const PLACEHOLDER = "./assets/model-placeholder.svg";
 
@@ -22,6 +22,10 @@ const state = {
   jobPhotoLimit: "250",
   jobFullCatalog: true,
   adminToken: localStorage.getItem("f1-admin-token") || "",
+  collectionUploadError: "",
+  collectionUpdateJobId: "",
+  collectionUpdateReloadedFor: "",
+  jobsPollTimer: null,
 };
 
 const statusLabels = {
@@ -970,6 +974,24 @@ function renderPhotoStatusBreakdown(summary) {
 function renderJobSummary(selected) {
   const summary = selected?.summary || {};
   if (!selected) return "";
+  if (selected.kind === "collection_update") {
+    return `
+      <section class="panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <strong>Načtení zdrojové sbírky</strong>
+            <span>${escapeHtml(selected.error || selected.step || "Přepočet aplikace")}</span>
+          </div>
+        </div>
+        <div class="job-summary-grid">
+          ${statCard("Řádky v Excelu", summary.sourceRows || 0)}
+          ${statCard("Načtené řádky sbírky", summary.collectionRows || 0)}
+          ${statCard("Modely v katalogu", summary.masterModels || 0)}
+          ${statCard("Data přepočtena", summary.updatedAt || "")}
+        </div>
+      </section>
+    `;
+  }
   const photoStatus = summary.photoStatus || {};
   const missing = Number(summary.missingPhotos || 0);
   return `
@@ -1079,8 +1101,13 @@ function renderJobs() {
             <input id="adminToken" data-job-field="adminToken" value="${escapeHtml(state.adminToken)}" type="password" autocomplete="off" />
           </div>
           <button class="primary-button" data-action="startYearJob">Spustit ročník</button>
+          <div class="collection-refresh-control">
+            <input id="collectionWorkbook" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden />
+            <button class="ghost-button" data-action="chooseCollectionWorkbook">Načíst změny ze sbírky</button>
+            <small>Vyber aktuální soubor Diecast 2026.xlsx ze synchronizované složky OneDrive.</small>
+          </div>
         </div>
-        ${state.jobsError ? `<p class="notice error">${escapeHtml(state.jobsError)}</p>` : ""}
+        ${state.jobsError || state.collectionUploadError ? `<p class="notice error">${escapeHtml(state.jobsError || state.collectionUploadError)}</p>` : ""}
         ${renderYearProcessSteps(selected)}
       </section>
       ${renderJobSummary(selected)}
@@ -1103,8 +1130,10 @@ function renderJobs() {
                         <strong>${escapeHtml(job.season)} · ${escapeHtml(job.step || "")}</strong>
                         <small>${escapeHtml(job.createdAt || "")}</small>
                         ${
-                          job.summary && Object.keys(job.summary).length
-                            ? `<small>${formatNumber(job.summary.models || 0)} modelů · ${formatNumber(job.summary.modelsWithPhoto || 0)} s fotkou · ${formatNumber(job.summary.missingPhotos || 0)} chybí</small>`
+                        job.summary && Object.keys(job.summary).length
+                            ? job.kind === "collection_update"
+                              ? `<small>${formatNumber(job.summary.collectionRows || job.summary.sourceRows || 0)} řádků sbírky · ${formatNumber(job.summary.masterModels || 0)} modelů katalogu</small>`
+                              : `<small>${formatNumber(job.summary.models || 0)} modelů · ${formatNumber(job.summary.modelsWithPhoto || 0)} s fotkou · ${formatNumber(job.summary.missingPhotos || 0)} chybí</small>`
                             : ""
                         }
                       </button>
@@ -1148,6 +1177,29 @@ async function apiFetch(path, options = {}) {
   return payload;
 }
 
+async function startCollectionUpdate(file) {
+  try {
+    state.collectionUploadError = "";
+    state.jobsError = "";
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".xlsx")) throw new Error("Vyberte zdrojový soubor .xlsx.");
+    if (file.size > 15 * 1024 * 1024) throw new Error("Soubor musí mít velikost do 15 MB.");
+    localStorage.setItem("f1-admin-token", state.adminToken);
+    const payload = await apiFetch("/collection/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+      body: file,
+    });
+    state.selectedJobId = payload.job.id;
+    state.collectionUpdateJobId = payload.job.id;
+    state.selectedJobLog = "Zdrojová sbírka nahrána. Probíhá přepočet katalogu a aplikace.";
+    await loadJobs();
+  } catch (error) {
+    state.collectionUploadError = error.message;
+    render();
+  }
+}
+
 async function loadJobs() {
   try {
     state.jobsError = "";
@@ -1155,7 +1207,17 @@ async function loadJobs() {
     state.jobs = payload.jobs || [];
     state.jobsLoaded = true;
     if (!state.selectedJobId && state.jobs.length) state.selectedJobId = state.jobs[0].id;
+    const collectionJob = state.jobs.find((job) => job.id === state.collectionUpdateJobId);
+    if (collectionJob?.status === "done" && state.collectionUpdateReloadedFor !== collectionJob.id) {
+      state.collectionUpdateReloadedFor = collectionJob.id;
+      location.reload();
+      return;
+    }
     render();
+    clearTimeout(state.jobsPollTimer);
+    if (state.jobs.some((job) => job.status === "queued" || job.status === "running")) {
+      state.jobsPollTimer = setTimeout(() => loadJobs(), 5000);
+    }
   } catch (error) {
     state.jobsError = error.message;
     state.jobsLoaded = true;
@@ -1318,6 +1380,9 @@ function wireEvents() {
       if (button.dataset.action === "startYearJob") {
         startYearJob();
       }
+      if (button.dataset.action === "chooseCollectionWorkbook") {
+        document.querySelector("#collectionWorkbook")?.click();
+      }
     });
   });
   document.querySelectorAll("[data-job-field]").forEach((field) => {
@@ -1331,6 +1396,11 @@ function wireEvents() {
       state[key] = field.type === "checkbox" ? field.checked : field.value;
       if (key === "adminToken") localStorage.setItem("f1-admin-token", state.adminToken);
     });
+  });
+  document.querySelector("#collectionWorkbook")?.addEventListener("change", (event) => {
+    const file = event.target.files?.[0];
+    startCollectionUpdate(file);
+    event.target.value = "";
   });
   document.querySelectorAll("[data-job-id]").forEach((button) => {
     button.addEventListener("click", () => {

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>F1 1:43 Model Catalog</title>
-    <link rel="stylesheet" href="./src/styles.css?v=20260905-year-builder-v1" />
+    <link rel="stylesheet" href="./src/styles.css?v=20261013-collection-refresh-v1" />
   </head>
   <body>
     <div id="app" class="app-shell">
@@ -13,6 +13,16 @@
         <span>Načítám data sbírky a katalogu...</span>
       </main>
     </div>
-    <script type="module" src="./src/app.js?v=20260905-year-builder-v1"></script>
+    <script>
+      if (location.protocol === "file:") {
+        document.querySelector(".loading-panel").innerHTML = `
+          <strong>Spusť lokální server</strong>
+          <span>Aplikaci nelze otevřít přímo jako soubor. V PowerShellu otevři složku projektu a spusť:</span>
+          <code>python app/serve_app.py</code>
+          <span>Potom otevři <a href="http://127.0.0.1:4173/#/collection">http://127.0.0.1:4173/#/collection</a>.</span>
+        `;
+      }
+    </script>
+    <script type="module" src="./src/app.js?v=20261013-collection-refresh-v1"></script>
   </body>
 </html>

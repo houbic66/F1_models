@@ -28,6 +28,10 @@ http://127.0.0.1:4173/#/collection
 python app/scripts/prepare_app_data.py
 ```
 
+## Refresh the Cloud Collection
+
+In the app's `Doplnit ročník` tab, enter the admin token and choose **Načíst změny ze sbírky**. Select the current `Diecast 2026.xlsx` from a locally synchronized OneDrive folder. The server checks the `Overview` sheet, backs up the existing collection and app data, then rematches and rebuilds the app data.
+
 ## Photo Discovery
 
 ```powershell

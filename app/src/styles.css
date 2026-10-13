@@ -564,6 +564,18 @@ tr.selected-row > td {
   padding: 16px;
 }
 
+.collection-refresh-control {
+  display: grid;
+  gap: 5px;
+  align-content: center;
+}
+
+.collection-refresh-control small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 .process-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));

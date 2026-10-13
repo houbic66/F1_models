@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 import unicodedata
@@ -28,12 +29,14 @@ from catalog_rules import (  # noqa: E402
 CATALOG_PATH = ROOT / "outputs" / "model_catalog" / "all_f1_143_models_matched.json"
 SUMMARY_PATH = ROOT / "outputs" / "model_catalog" / "all_f1_143_models_summary.json"
 PILOT_WORKBOOK = ROOT / "input" / "F1_1980_Driver_Standings_Collection_v10.xlsx"
-COLLECTION_WORKBOOK = (
-    ROOT
-    / "outputs"
-    / "wiki_audit"
-    / "Diecast 2026 - doplneno z auditu - body 1976-2025.xlsx"
+COLLECTION_WORKBOOK = Path(
+    os.environ.get(
+        "F1_COLLECTION_WORKBOOK",
+        str(ROOT / "input" / "Diecast 2026.xlsx"),
+    )
 )
+if not COLLECTION_WORKBOOK.exists():
+    COLLECTION_WORKBOOK = ROOT / "outputs" / "wiki_audit" / "Diecast 2026 - doplneno z auditu - body 1976-2025.xlsx"
 PHOTO_OVERRIDES_PATH = DATA_DIR / "model_photo_overrides.json"
 
 
@@ -251,55 +254,60 @@ def row_dict(headers: list[str], row: tuple[Any, ...]) -> dict[str, Any]:
 
 def load_collection(photo_overrides: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     wb = load_workbook(COLLECTION_WORKBOOK, read_only=True, data_only=True)
-    ws = wb["Overview"]
-    headers = [clean(cell.value) for cell in ws[1]]
-    items: list[dict[str, Any]] = []
-    for row_index, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
-        values = row_dict(headers, row)
-        raw_code = clean(values.get("Code"))
-        manufacturer = row_manufacturer_name(values.get("Brand"), raw_code, values.get("Extra"))
-        code = canonical_catalog_number(manufacturer, raw_code) or raw_code
-        quantity = number(values.get("Pc"))
-        nv = number(values.get("NV"))
-        v = number(values.get("V"))
-        display_status = collection_display_status(quantity, nv, v, code)
-        item_id = model_id(manufacturer, code) if code and manufacturer else f"collection-row-{row_index}"
-        photo_record = photo_record_for(photo_overrides, manufacturer, code, item_id)
-        items.append(
-            {
-                "id": item_id,
-                "sourceRow": row_index,
-                "season": clean(values.get("Year")),
-                "team": clean(values.get("Team")),
-                "car": clean(values.get("Car")),
-                "chassis": clean(values.get("Type")),
-                "carNumber": clean(values.get("Nr")).replace("Nr ", ""),
-                "driver": clean(values.get("Driver")),
-                "manufacturer": manufacturer,
-                "catalogNumber": code,
-                "extra": clean(values.get("Extra")),
-                "quantity": quantity,
-                "nv": nv,
-                "v": v,
-                "driverStanding": clean(values.get("D")),
-                "driverPoints": clean(values.get("DP")),
-                "teamStanding": clean(values.get("T")),
-                "teamPoints": clean(values.get("TP")),
-                "owned": quantity > 0,
-                "displayStatus": display_status,
-                "displayLabel": collection_display_label(display_status),
-                "mainPhoto": photo_record["mainPhoto"],
-                "thumbnails": photo_record["thumbnails"],
-                "originalPhotoUrl": photo_record["originalPhotoUrl"],
-                "photoSourcePageUrl": photo_record["sourcePageUrl"],
-                "photoStatus": photo_record["photoStatus"],
-                "photoCheckedAt": photo_record["photoCheckedAt"],
-                "photoHttpStatus": photo_record["photoHttpStatus"],
-                "photoContentType": photo_record["photoContentType"],
-                "photoUrls": photo_urls(photo_record),
-            }
-        )
-    return items
+    try:
+        ws = wb["Overview"]
+        headers = [clean(cell.value) for cell in ws[1]]
+        items: list[dict[str, Any]] = []
+        for row_index, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            if not any(clean(value) for value in row):
+                continue
+            values = row_dict(headers, row)
+            raw_code = clean(values.get("Code"))
+            manufacturer = row_manufacturer_name(values.get("Brand"), raw_code, values.get("Extra"))
+            code = canonical_catalog_number(manufacturer, raw_code) or raw_code
+            quantity = number(values.get("Pc"))
+            nv = number(values.get("NV"))
+            v = number(values.get("V"))
+            display_status = collection_display_status(quantity, nv, v, code)
+            item_id = model_id(manufacturer, code) if code and manufacturer else f"collection-row-{row_index}"
+            photo_record = photo_record_for(photo_overrides, manufacturer, code, item_id)
+            items.append(
+                {
+                    "id": item_id,
+                    "sourceRow": row_index,
+                    "season": clean(values.get("Year")),
+                    "team": clean(values.get("Team")),
+                    "car": clean(values.get("Car")),
+                    "chassis": clean(values.get("Type")),
+                    "carNumber": clean(values.get("Nr")).replace("Nr ", ""),
+                    "driver": clean(values.get("Driver")),
+                    "manufacturer": manufacturer,
+                    "catalogNumber": code,
+                    "extra": clean(values.get("Extra")),
+                    "quantity": quantity,
+                    "nv": nv,
+                    "v": v,
+                    "driverStanding": clean(values.get("D")),
+                    "driverPoints": clean(values.get("DP")),
+                    "teamStanding": clean(values.get("T")),
+                    "teamPoints": clean(values.get("TP")),
+                    "owned": quantity > 0,
+                    "displayStatus": display_status,
+                    "displayLabel": collection_display_label(display_status),
+                    "mainPhoto": photo_record["mainPhoto"],
+                    "thumbnails": photo_record["thumbnails"],
+                    "originalPhotoUrl": photo_record["originalPhotoUrl"],
+                    "photoSourcePageUrl": photo_record["sourcePageUrl"],
+                    "photoStatus": photo_record["photoStatus"],
+                    "photoCheckedAt": photo_record["photoCheckedAt"],
+                    "photoHttpStatus": photo_record["photoHttpStatus"],
+                    "photoContentType": photo_record["photoContentType"],
+                    "photoUrls": photo_urls(photo_record),
+                }
+            )
+        return items
+    finally:
+        wb.close()
 
 
 def load_pilot_workbook() -> dict[str, list[dict[str, Any]]]:

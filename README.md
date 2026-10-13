@@ -62,6 +62,8 @@ deploy/hetzner/README.md
 
 The cloud deployment can also run protected year-processing jobs from the app. Open the `Úlohy` tab, enter the server admin token, choose a season, and start the background job.
 
+In the same tab, use **Načíst změny ze sbírky** to select the current `Diecast 2026.xlsx` from a locally synchronized OneDrive folder. The server validates the `Overview` sheet, backs up the current collection and generated app data, then rematches the catalog and refreshes the app. This upload requires the admin token.
+
 ## Data Policy
 
 The following are intentionally not committed to the public repository:

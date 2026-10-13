@@ -9,6 +9,7 @@ import sys
 import threading
 import time
 import uuid
+from zipfile import BadZipFile, ZipFile
 from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -22,6 +23,7 @@ DATA_DIR = APP_DIR / "data"
 JOBS_DIR = DATA_DIR / "jobs"
 BACKUP_DIR = DATA_DIR / "backups"
 YEAR_RUNS_DIR = ROOT / "outputs" / "year_runs"
+COLLECTION_WORKBOOK = ROOT / "input" / "Diecast 2026.xlsx"
 PYTHON = sys.executable
 HOST = os.environ.get("F1_JOB_HOST", "127.0.0.1")
 PORT = int(os.environ.get("F1_JOB_PORT", "8765"))
@@ -200,6 +202,84 @@ def run_year_job(job_id: str) -> None:
             running_jobs.pop(job_id, None)
 
 
+def validate_collection_workbook(path: Path) -> int:
+    try:
+        with ZipFile(path) as archive:
+            if "xl/workbook.xml" not in archive.namelist():
+                raise ValueError("Soubor není platný Excel XLSX.")
+    except (BadZipFile, OSError) as exc:
+        raise ValueError("Soubor není platný Excel XLSX.") from exc
+    try:
+        from openpyxl import load_workbook
+
+        book = load_workbook(path, read_only=True, data_only=True)
+        try:
+            if "Overview" not in book.sheetnames:
+                raise ValueError("V Excelu chybí list Overview.")
+            sheet = book["Overview"]
+            headers = [str(cell.value or "").strip() for cell in next(sheet.iter_rows(min_row=1, max_row=1))]
+            required = {"Year", "Team", "Car", "Type", "Nr", "Driver", "Brand", "Pc", "Code"}
+            missing = sorted(required - set(headers))
+            if missing:
+                raise ValueError(f"V listu Overview chybí sloupce: {', '.join(missing)}")
+            return sum(1 for row in sheet.iter_rows(min_row=2, values_only=True) if any(value is not None and str(value).strip() for value in row))
+        finally:
+            book.close()
+    except ImportError as exc:
+        raise RuntimeError("Na serveru chybí knihovna openpyxl.") from exc
+
+
+def run_collection_update(job_id: str, staged_path: Path, row_count: int) -> None:
+    job = load_job(job_id)
+    backup_dir = BACKUP_DIR / f"collection-{job_id}"
+    targets = [
+        COLLECTION_WORKBOOK,
+        DATA_DIR / "app-data.json",
+        ROOT / "outputs/model_catalog/all_f1_143_models_matched.json",
+        ROOT / "outputs/model_catalog/all_f1_143_models_matched.csv",
+        ROOT / "outputs/model_catalog/all_f1_143_models_summary.json",
+    ]
+    workbook_replaced = False
+    try:
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        job["step"] = "Záloha předchozí sbírky a dat"
+        save_job(job)
+        for target in targets:
+            if target.exists():
+                backup = backup_dir / target.name
+                shutil.copy2(target, backup)
+                (backup_dir / f"{target.name}.present").write_text("1", encoding="ascii")
+        COLLECTION_WORKBOOK.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(staged_path, COLLECTION_WORKBOOK)
+        workbook_replaced = True
+        run_command(job, "Párování katalogu proti nové sbírce", [PYTHON, "match_model_catalog.py"])
+        run_command(job, "Přepočet dat aplikace", [PYTHON, "app/scripts/prepare_app_data.py"])
+        data = json.loads((DATA_DIR / "app-data.json").read_text(encoding="utf-8"))
+        job["summary"] = {
+            "sourceRows": row_count,
+            "collectionRows": len(data.get("collectionItems", [])),
+            "masterModels": len(data.get("models", [])),
+            "updatedAt": data.get("generatedAt", ""),
+        }
+        append_log(job_id, f"Sbírka načtena: {json.dumps(job['summary'], ensure_ascii=False)}")
+        set_job_state(job, "done", "Sbírka načtena")
+    except Exception as exc:
+        append_log(job_id, f"CHYBA: {exc}; obnovuji předchozí data.")
+        if workbook_replaced:
+            for target in targets:
+                backup = backup_dir / target.name
+                if (backup_dir / f"{target.name}.present").exists():
+                    if backup.exists():
+                        shutil.copy2(backup, target)
+                elif target.exists():
+                    target.unlink()
+        set_job_state(job, "failed", job.get("step", ""), str(exc))
+    finally:
+        staged_path.unlink(missing_ok=True)
+        with running_lock:
+            running_jobs.pop(job_id, None)
+
+
 def list_jobs() -> list[dict]:
     jobs = []
     for path in sorted(JOBS_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
@@ -275,12 +355,49 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
-        if path != "/api/jobs/start":
+        if path not in {"/api/jobs/start", "/api/collection/update"}:
             self.send_payload(HTTPStatus.NOT_FOUND, {"error": "Nenalezeno."})
             return
         if not self.require_admin():
             return
         try:
+            with running_lock:
+                if any(thread.is_alive() for thread in running_jobs.values()):
+                    self.send_payload(HTTPStatus.CONFLICT, {"error": "Jiná úloha právě běží. Počkejte na její dokončení."})
+                    return
+            if path == "/api/collection/update":
+                length = int(self.headers.get("Content-Length", "0") or "0")
+                if length <= 0 or length > 15 * 1024 * 1024:
+                    raise ValueError("Soubor musí mít velikost do 15 MB.")
+                raw = self.rfile.read(length)
+                staged_path = DATA_DIR / f"collection-upload-{uuid.uuid4().hex}.xlsx"
+                staged_path.write_bytes(raw)
+                try:
+                    row_count = validate_collection_workbook(staged_path)
+                except Exception:
+                    staged_path.unlink(missing_ok=True)
+                    raise
+                job_id = uuid.uuid4().hex[:12]
+                job = {
+                    "id": job_id,
+                    "kind": "collection_update",
+                    "season": "all",
+                    "status": "queued",
+                    "step": "Čeká na spuštění",
+                    "error": "",
+                    "createdAt": now_iso(),
+                    "updatedAt": now_iso(),
+                    "finishedAt": "",
+                    "summary": {"sourceRows": row_count},
+                }
+                save_job(job)
+                append_log(job_id, f"Aktualizace zdrojové sbírky ({row_count} datových řádků).")
+                thread = threading.Thread(target=run_collection_update, args=(job_id, staged_path, row_count), daemon=True)
+                with running_lock:
+                    running_jobs[job_id] = thread
+                thread.start()
+                self.send_payload(HTTPStatus.ACCEPTED, {"job": job})
+                return
             payload = self.read_body()
             season = clean_year(payload.get("season"))
             job_id = uuid.uuid4().hex[:12]
