@@ -64,6 +64,17 @@ The cloud deployment can also run protected year-processing jobs from the app. O
 
 In the same tab, use **Načíst změny ze sbírky** to select the current `Diecast 2026.xlsx` from a locally synchronized OneDrive folder. The server validates the `Overview` sheet, backs up the current collection and generated app data, then rematches the catalog and refreshes the app. This upload requires the admin token.
 
+For direct local publishing by Codex, configure the token once in Windows and then run the helper when the OneDrive workbook changes:
+
+```powershell
+python app/scripts/publish_collection.py --configure
+python app/scripts/publish_collection.py --publish
+```
+
+The helper reads the synchronized `OneDrive\Dokumenty\Diecast 2026.xlsx` and stores the token encrypted with Windows DPAPI for the current Windows user. The token is never written into the repository.
+
+The current Hetzner endpoint uses HTTP, so the admin token is not encrypted while sent over the network. Use this only on a trusted network; configure HTTPS before relying on this for routine use over the public internet.
+
 ## Data Policy
 
 The following are intentionally not committed to the public repository:
